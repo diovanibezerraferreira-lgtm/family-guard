@@ -53,7 +53,6 @@ export async function createChildProfile(parentId: string, name: string, dailyLi
     createdAt: serverTimestamp(),
   });
 
-  // Popula os aplicativos padrão na subcoleção
   for (const app of DEFAULT_APPS) {
     await setDoc(doc(db, 'children', childRef.id, 'apps', app.packageName), {
       ...app,
