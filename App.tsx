@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth } from './src/config/firebase';
 import AuthScreen from './src/screens/AuthScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
@@ -9,32 +9,38 @@ import ChildModeScreen from './src/screens/ChildModeScreen';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [childId, setChildId] = useState<string | null>(null);
-  const [pairingFlow, setPairingFlow] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [isChildSetupMode, setIsChildSetupMode] = useState(false);
+  const [pairedChildId, setPairedChildId] = useState<string | null>(null);
 
   useEffect(() => {
-    AsyncStorage.getItem('@family_guard_child_id').then((savedId) => {
-      if (savedId) setChildId(savedId);
-    });
-
-    const unsub = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
+      setLoading(false);
     });
-    return unsub;
+    return unsubscribe;
   }, []);
 
-  if (childId) {
-    return <ChildModeScreen childId={childId} />;
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#101D38', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#D6AD53" />
+      </View>
+    );
   }
 
-  if (pairingFlow) {
+  if (pairedChildId) {
+    return <ChildModeScreen childId={pairedChildId} />;
+  }
+
+  if (isChildSetupMode) {
     return (
       <PairDeviceScreen
-        onPaired={(id) => {
-          setChildId(id);
-          setPairingFlow(false);
+        onPaired={(childId) => {
+          setPairedChildId(childId);
+          setIsChildSetupMode(false);
         }}
-        onBack={() => setPairingFlow(false)}
+        onBack={() => setIsChildSetupMode(false)}
       />
     );
   }
@@ -43,5 +49,5 @@ export default function App() {
     return <DashboardScreen />;
   }
 
-  return <AuthScreen onSelectChildMode={() => setPairingFlow(true)} />;
+  return <AuthScreen onSelectChildMode={() => setIsChildSetupMode(true)} />;
 }

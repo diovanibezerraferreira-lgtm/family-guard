@@ -1,53 +1,25 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth } from './src/config/firebase';
-import AuthScreen from './src/screens/AuthScreen';
-import DashboardScreen from './src/screens/DashboardScreen';
-import PairDeviceScreen from './src/screens/PairDeviceScreen';
-import ChildModeScreen from './src/screens/ChildModeScreen';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { getAuth, Auth } from 'firebase/auth';
+import { getFirestore, Firestore } from 'firebase/firestore';
 
-export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isChildSetupMode, setIsChildSetupMode] = useState(false);
-  const [pairedChildId, setPairedChildId] = useState<string | null>(null);
+const firebaseConfig = {
+  apiKey: "AIzaSyBpbsnBAD4DCAE2IhplDu1q_jvwuU5ucQ8",
+  authDomain: "family-guard-82cad.firebaseapp.com",
+  projectId: "family-guard-82cad",
+  storageBucket: "family-guard-82cad.firebasestorage.app",
+  messagingSenderId: "989168915952",
+  appId: "1:989168915952:web:391c8a1bbc5125401e7935",
+  measurementId: "G-225PZTPK11"
+};
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setLoading(false);
-    });
-    return unsubscribe;
-  }, []);
-
-  if (loading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#101D38', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#D6AD53" />
-      </View>
-    );
+function getFirebaseApp(): FirebaseApp {
+  if (getApps().length > 0) {
+    return getApp();
   }
-
-  if (pairedChildId) {
-    return <ChildModeScreen childId={pairedChildId} />;
-  }
-
-  if (isChildSetupMode) {
-    return (
-      <PairDeviceScreen
-        onPaired={(childId) => {
-          setPairedChildId(childId);
-          setIsChildSetupMode(false);
-        }}
-        onBack={() => setIsChildSetupMode(false)}
-      />
-    );
-  }
-
-  if (user && !user.isAnonymous) {
-    return <DashboardScreen />;
-  }
-
-  return <AuthScreen onSelectChildMode={() => setIsChildSetupMode(true)} />;
+  return initializeApp(firebaseConfig);
 }
+
+const app = getFirebaseApp();
+
+export const auth: Auth = getAuth(app);
+export const db: Firestore = getFirestore(app);
