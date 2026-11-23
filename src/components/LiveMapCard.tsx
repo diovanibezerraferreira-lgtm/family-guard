@@ -20,7 +20,7 @@ export default function LiveMapCard({
 }: LiveMapCardProps) {
   const openGoogleMaps = () => {
     if (!location) return;
-    const url = `https://www.google.com/maps?q=${location.lat},${location.lng}`;
+    const url = `https://www.google.com/maps/search/?api=1&query=${location.lat},${location.lng}`;
     Linking.openURL(url);
   };
 
@@ -36,7 +36,11 @@ export default function LiveMapCard({
   };
 
   const formattedTime = location?.updatedAt
-    ? new Date(location.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    ? new Date(location.updatedAt).toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })
     : '';
 
   return (
@@ -48,7 +52,8 @@ export default function LiveMapCard({
             <Text style={styles.cardTitle}>Mapa ao Vivo & Cercas Virtuais</Text>
             {location && (
               <Text style={styles.subMeta}>
-                Atualizado às {formattedTime} {location.accuracy ? `• Precisão ~${location.accuracy}m` : ''}
+                Atualizado às {formattedTime}{' '}
+                {location.accuracy ? `• Precisão ~${location.accuracy}m` : ''}
               </Text>
             )}
           </View>
@@ -60,10 +65,20 @@ export default function LiveMapCard({
         )}
       </View>
 
+      {location?.accuracy && location.accuracy > 150 && (
+        <View style={styles.warnBanner}>
+          <Text style={styles.warnText}>
+            Sinal aproximado ({location.accuracy}m). No celular da criança, ative o GPS do aparelho e toque em "Atualizar GPS Agora".
+          </Text>
+        </View>
+      )}
+
       {geofenceAlert && (
         <View style={styles.alertBanner}>
           <AlertTriangle color="#B91C1C" size={18} />
-          <Text style={styles.alertText}>{childName}: {geofenceAlert}</Text>
+          <Text style={styles.alertText}>
+            {childName}: {geofenceAlert}
+          </Text>
         </View>
       )}
 
@@ -78,12 +93,13 @@ export default function LiveMapCard({
           {Platform.OS === 'web' ? (
             <View style={styles.mapFrameWrap}>
               <iframe
+                key={`${location.lat}-${location.lng}`}
                 title="Mapa Google Family Guard"
                 width="100%"
-                height="240"
+                height="250"
                 style={{ border: 0, borderRadius: 12 }}
                 loading="lazy"
-                src={`https://maps.google.com/maps?q=${location.lat},${location.lng}&z=17&output=embed`}
+                src={`https://maps.google.com/maps?q=loc:${location.lat},${location.lng}&z=18&output=embed`}
               />
             </View>
           ) : (
@@ -140,6 +156,11 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#101D38' },
   subMeta: { fontSize: 11, color: '#64748B', marginTop: 1 },
   extBtn: { padding: 8, backgroundColor: '#F1F5F9', borderRadius: 8 },
+  warnBanner: {
+    backgroundColor: '#FEF3C7', borderRadius: 10, padding: 10, marginBottom: 10,
+    borderWidth: 1, borderColor: '#F59E0B',
+  },
+  warnText: { color: '#92400E', fontSize: 12, fontWeight: '600' },
   alertBanner: {
     backgroundColor: '#FEE2E2', borderRadius: 10, padding: 10, marginBottom: 12,
     flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#F87171',
