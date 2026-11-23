@@ -1,11 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, NativeModules, Platform } from 'react-native';
 import * as Location from 'expo-location';
 import * as Battery from 'expo-battery';
 import { doc, updateDoc } from 'firebase/firestore';
-import { Shield, Lock, Clock, AlertTriangle } from 'lucide-react-native';
+import { Shield, Lock, Clock, AlertTriangle, ShieldAlert } from 'lucide-react-native';
 import { db } from '../config/firebase';
-import { subscribeToChild, updateChildTelemetry } from '../services/familyService';
+import {
+  subscribeToChild,
+  subscribeToChildApps,
+  updateChildTelemetry,
+  AppRule,
+} from '../services/familyService';
+
+const { FamilyGuardNative } = NativeModules;
 
 interface ChildModeScreenProps {
   childId: string;
@@ -13,14 +20,28 @@ interface ChildModeScreenProps {
 
 export default function ChildModeScreen({ childId }: ChildModeScreenProps) {
   const [childData, setChildData] = useState<any>(null);
+  const [apps, setApps] = useState<AppRule[]>([]);
+  const [requestSent, setRequestSent] = useState(false);
 
   useEffect(() => {
-    const unsub = subscribeToChild(childId, setChildData);
-    return unsub;
+    const unsubChild = subscribeToChild(childId, setChildData);
+    const unsubApps = subscribeToChildApps(childId, (appList) => {
+      setApps(appList);
+      // Sincroniza pacotes bloqueados com o serviço nativo Android (quando compilado em APK)
+      if (Platform.OS === 'android' && FamilyGuardNative?.syncBlockedPackages) {
+        const blockedPkgs = appList.filter((a) => a.isBlocked).map((a) => a.packageName);
+        FamilyGuardNative.syncBlockedPackages(blockedPkgs);
+      }
+    });
+
+    return () => {
+      unsubChild();
+      unsubApps();
+    };
   }, [childId]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    if (!childData) return;
 
     const sendTelemetry = async () => {
       try {
@@ -31,22 +52,28 @@ export default function ChildModeScreen({ childId }: ChildModeScreenProps) {
         const batLevel = await Battery.getBatteryLevelAsync();
         const batteryPercent = batLevel >= 0 ? Math.round(batLevel * 100) : 100;
 
-        await updateChildTelemetry(childId, loc.coords.latitude, loc.coords.longitude, batteryPercent);
+        await updateChildTelemetry(
+          childId,
+          loc.coords.latitude,
+          loc.coords.longitude,
+          batteryPercent,
+          childData.safeZones || []
+        );
       } catch (e) {
-        // Silencia falhas temporárias de rede/GPS
+        // Silencia falhas temporárias
       }
     };
 
     sendTelemetry();
-    interval = setInterval(sendTelemetry, 30000);
+    const interval = setInterval(sendTelemetry, 25000);
     return () => clearInterval(interval);
-  }, [childId]);
+  }, [childId, childData?.safeZones]);
 
   const requestMoreTime = async () => {
     await updateDoc(doc(db, 'children', childId), {
       unlockRequest: { requestedAt: Date.now(), minutes: 15 },
     });
-    Alert.alert('Pedido enviado!', 'Seus pais receberam a solicitação de +15 minutos.');
+    setRequestSent(true);
   };
 
   if (!childData) {
@@ -59,6 +86,7 @@ export default function ChildModeScreen({ childId }: ChildModeScreenProps) {
 
   const remaining = Math.max(0, (childData.dailyLimitMinutes || 120) - (childData.usedMinutesToday || 0));
   const isBlocked = childData.isLocked || remaining === 0;
+  const blockedApps = apps.filter((a) => a.isBlocked);
 
   if (isBlocked) {
     return (
@@ -69,7 +97,9 @@ export default function ChildModeScreen({ childId }: ChildModeScreenProps) {
           O aparelho foi pausado pelos responsáveis. Aproveite para descansar ou brincar offline!
         </Text>
         <TouchableOpacity style={styles.requestBtn} onPress={requestMoreTime}>
-          <Text style={styles.requestBtnText}>Pedir +15 minutos aos Pais</Text>
+          <Text style={styles.requestBtnText}>
+            {requestSent ? 'Pedido Enviado aos Pais!' : 'Pedir +15 minutos aos Pais'}
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -87,11 +117,24 @@ export default function ChildModeScreen({ childId }: ChildModeScreenProps) {
         <Text style={styles.greeting}>Olá, {childData.name}</Text>
         <Text style={styles.remainingLabel}>Tempo restante hoje</Text>
         <Text style={styles.remainingValue}>{remaining} min</Text>
+
+        {blockedApps.length > 0 && (
+          <View style={styles.blockedListBox}>
+            <ShieldAlert color="#DC2626" size={16} />
+            <Text style={styles.blockedListText}>
+              Apps bloqueados: {blockedApps.map((a) => a.name).join(', ')}
+            </Text>
+          </View>
+        )}
       </View>
 
       <TouchableOpacity
         style={styles.sosBtn}
-        onPress={() => Alert.alert('Alerta SOS', 'Localização de emergência enviada aos pais!')}
+        onPress={async () => {
+          await updateDoc(doc(db, 'children', childId), {
+            geofenceAlert: 'BOTÃO DE EMERGÊNCIA (SOS) ACIONADO!',
+          });
+        }}
       >
         <AlertTriangle color="#FFFFFF" size={22} />
         <Text style={styles.sosText}>Botão de Emergência (SOS)</Text>
@@ -106,11 +149,16 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 40 },
   headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '800', letterSpacing: 1 },
   timerCard: {
-    backgroundColor: '#FFFFFF', borderRadius: 24, padding: 32, alignItems: 'center',
+    backgroundColor: '#FFFFFF', borderRadius: 24, padding: 28, alignItems: 'center',
   },
   greeting: { fontSize: 20, fontWeight: '700', color: '#101D38', marginTop: 12 },
   remainingLabel: { fontSize: 14, color: '#64748B', marginTop: 6 },
   remainingValue: { fontSize: 48, fontWeight: '900', color: '#101D38', marginTop: 4 },
+  blockedListBox: {
+    marginTop: 16, backgroundColor: '#FEE2E2', paddingVertical: 8, paddingHorizontal: 12,
+    borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6,
+  },
+  blockedListText: { color: '#B91C1C', fontSize: 12, fontWeight: '700' },
   sosBtn: {
     backgroundColor: '#DC2626', borderRadius: 16, padding: 18,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 20,

@@ -1,21 +1,36 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  TextInput, Modal, Alert
+  TextInput, Modal, Switch
 } from 'react-native';
 import { collection, query, where, onSnapshot, doc, updateDoc, increment } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import {
-  Shield, Lock, Unlock, Plus, Clock, MapPin, Battery, LogOut, Smartphone
+  Shield, Lock, Unlock, Plus, Clock, Battery, LogOut, Smartphone, Grid
 } from 'lucide-react-native';
 import { auth, db } from '../config/firebase';
-import { createChildProfile, toggleRemoteLock } from '../services/familyService';
+import {
+  createChildProfile,
+  toggleRemoteLock,
+  subscribeToChildApps,
+  toggleAppBlock,
+  addCustomAppRule,
+  saveSafeZone,
+  AppRule,
+} from '../services/familyService';
+import LiveMapCard from '../components/LiveMapCard';
 
 export default function DashboardScreen() {
   const [childrenList, setChildrenList] = useState<any[]>([]);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+  const [appsList, setAppsList] = useState<AppRule[]>([]);
+
   const [modalVisible, setModalVisible] = useState(false);
   const [newChildName, setNewChildName] = useState('');
+
+  const [appModalVisible, setAppModalVisible] = useState(false);
+  const [customAppName, setCustomAppName] = useState('');
+  const [customAppPkg, setCustomAppPkg] = useState('');
 
   const parentId = auth.currentUser?.uid;
 
@@ -34,20 +49,29 @@ export default function DashboardScreen() {
 
   const activeChild = childrenList.find((c) => c.id === selectedChildId) || childrenList[0];
 
+  useEffect(() => {
+    if (!activeChild?.id) {
+      setAppsList([]);
+      return;
+    }
+    const unsub = subscribeToChildApps(activeChild.id, setAppsList);
+    return unsub;
+  }, [activeChild?.id]);
+
   const handleAddChild = async () => {
     if (!newChildName.trim() || !parentId) return;
-    try {
-      const { childId, pairingCode } = await createChildProfile(parentId, newChildName.trim(), 120);
-      setSelectedChildId(childId);
-      setNewChildName('');
-      setModalVisible(false);
-      Alert.alert(
-        'Perfil Criado!',
-        `Digite o código ${pairingCode} no celular de ${newChildName.trim()} para vincular.`
-      );
-    } catch (e) {
-      Alert.alert('Erro', 'Não foi possível criar o perfil.');
-    }
+    const { childId } = await createChildProfile(parentId, newChildName.trim(), 120);
+    setSelectedChildId(childId);
+    setNewChildName('');
+    setModalVisible(false);
+  };
+
+  const handleAddCustomApp = async () => {
+    if (!activeChild || !customAppName.trim()) return;
+    await addCustomAppRule(activeChild.id, customAppName, customAppPkg);
+    setCustomAppName('');
+    setCustomAppPkg('');
+    setAppModalVisible(false);
   };
 
   const adjustTimeLimit = async (deltaMinutes: number) => {
@@ -115,13 +139,14 @@ export default function DashboardScreen() {
               </View>
             )}
 
+            {/* Cartão Principal de Status e Bloqueio Geral */}
             <View style={styles.card}>
               <View style={styles.rowBetween}>
                 <View>
                   <Text style={styles.childName}>{activeChild.name}</Text>
                   <Text style={styles.statusSub}>
                     {activeChild.deviceId
-                      ? 'Dispositivo Conectado'
+                      ? `Dispositivo Conectado • Código: ${activeChild.pairingCode}`
                       : `Aguardando pareamento • Código: ${activeChild.pairingCode}`}
                   </Text>
                 </View>
@@ -142,6 +167,7 @@ export default function DashboardScreen() {
               </TouchableOpacity>
             </View>
 
+            {/* Limite Diário de Tela */}
             <View style={styles.card}>
               <View style={styles.cardHeader}>
                 <Clock color="#101D38" size={20} />
@@ -160,23 +186,50 @@ export default function DashboardScreen() {
               </View>
             </View>
 
+            {/* Módulo B: Mapa Interativo e Cercas Virtuais */}
+            <LiveMapCard
+              childName={activeChild.name}
+              location={activeChild.lastLocation}
+              safeZones={activeChild.safeZones || []}
+              geofenceAlert={activeChild.geofenceAlert || null}
+              onSaveZone={(zone) => saveSafeZone(activeChild.id, activeChild.safeZones || [], zone)}
+            />
+
+            {/* Módulo A: Controlo Individual de Aplicativos */}
             <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <MapPin color="#101D38" size={20} />
-                <Text style={styles.cardTitle}>Localização GPS ao Vivo</Text>
+              <View style={styles.rowBetween}>
+                <View style={styles.cardHeader}>
+                  <Grid color="#101D38" size={20} />
+                  <Text style={styles.cardTitle}>Aplicativos Permitidos / Bloqueados</Text>
+                </View>
+                <TouchableOpacity style={styles.smallAddBtn} onPress={() => setAppModalVisible(true)}>
+                  <Plus color="#D6AD53" size={16} />
+                  <Text style={styles.smallAddText}>App</Text>
+                </TouchableOpacity>
               </View>
-              {activeChild.lastLocation ? (
-                <Text style={styles.gpsCoords}>
-                  Lat: {activeChild.lastLocation.lat.toFixed(5)} | Lng: {activeChild.lastLocation.lng.toFixed(5)}
-                </Text>
-              ) : (
-                <Text style={styles.statusSub}>Aguardando sinal GPS do celular da criança...</Text>
-              )}
+
+              {appsList.map((app) => (
+                <View key={app.packageName} style={styles.appRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.appName}>{app.name}</Text>
+                    <Text style={styles.appMeta}>
+                      {app.category} • {app.isBlocked ? 'Bloqueado' : 'Liberado'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={!app.isBlocked}
+                    onValueChange={(allowed) => toggleAppBlock(activeChild.id, app.packageName, !allowed)}
+                    trackColor={{ false: '#FCA5A5', true: '#101D38' }}
+                    thumbColor={!app.isBlocked ? '#D6AD53' : '#DC2626'}
+                  />
+                </View>
+              ))}
             </View>
           </>
         )}
       </ScrollView>
 
+      {/* Modal Adicionar Filho */}
       <Modal visible={modalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
@@ -198,6 +251,36 @@ export default function DashboardScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Modal Adicionar App Personalizado */}
+      <Modal visible={appModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.cardTitle}>Adicionar Regra de Aplicativo</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Nome do App (ex: Free Fire)"
+              value={customAppName}
+              onChangeText={setCustomAppName}
+            />
+            <TextInput
+              style={[styles.input, { marginTop: 0 }]}
+              placeholder="Pacote Android opcional (ex: com.dts.freefireth)"
+              autoCapitalize="none"
+              value={customAppPkg}
+              onChangeText={setCustomAppPkg}
+            />
+            <View style={styles.rowBetween}>
+              <TouchableOpacity onPress={() => setAppModalVisible(false)} style={styles.cancelBtn}>
+                <Text style={styles.cancelBtnText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleAddCustomApp} style={styles.confirmBtn}>
+                <Text style={styles.confirmBtnText}>Adicionar e Bloquear</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -210,7 +293,7 @@ const styles = StyleSheet.create({
   },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   topTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '800', letterSpacing: 1 },
-  scrollContent: { padding: 16 },
+  scrollContent: { padding: 16, paddingBottom: 40 },
   childTabs: { flexDirection: 'row', marginBottom: 16 },
   childPill: {
     backgroundColor: '#FFFFFF', paddingVertical: 10, paddingHorizontal: 18,
@@ -264,14 +347,24 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: '#101D38', padding: 12, borderRadius: 10, alignItems: 'center',
   },
   timeBtnText: { color: '#D6AD53', fontWeight: '700' },
-  gpsCoords: { fontSize: 14, color: '#101D38', fontWeight: '600' },
+  smallAddBtn: {
+    backgroundColor: '#101D38', paddingVertical: 6, paddingHorizontal: 12,
+    borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 10,
+  },
+  smallAddText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
+  appRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9',
+  },
+  appName: { fontSize: 15, fontWeight: '700', color: '#101D38' },
+  appMeta: { fontSize: 12, color: '#64748B', marginTop: 2 },
   modalOverlay: {
     flex: 1, backgroundColor: 'rgba(16, 29, 56, 0.7)', justifyContent: 'center', padding: 24,
   },
   modalCard: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 20 },
   input: {
     borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, padding: 12,
-    marginVertical: 14, fontSize: 15,
+    marginVertical: 12, fontSize: 15,
   },
   cancelBtn: { padding: 12 },
   cancelBtnText: { color: '#64748B', fontWeight: '600' },
