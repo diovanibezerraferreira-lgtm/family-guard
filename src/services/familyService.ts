@@ -1,7 +1,8 @@
 import {
-  getFirestore, collection, doc, setDoc, getDocs,
+  collection, doc, setDoc, getDocs,
   query, where, updateDoc, onSnapshot, serverTimestamp
 } from 'firebase/firestore';
+import { db } from '../config/firebase';
 
 const db = getFirestore();
 
