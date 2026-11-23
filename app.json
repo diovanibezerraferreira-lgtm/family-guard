@@ -1,25 +1,23 @@
 {
   "expo": {
     "name": "FamilyGuard",
-    "slug": "FamilyGuard",
+    "slug": "family-guard",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "ios": {
-      "supportsTablet": true
+    "web": {
+      "bundler": "metro",
+      "output": "single"
     },
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
-      },
-      "predictiveBackGestureEnabled": false
+      "package": "com.familyguard.app"
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
+    "plugins": [
+      "./plugins/withFamilyGuardAndroid.js"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "cbfdd3e9-f792-41e8-9f50-33b6f6f5c589"
+      }
     }
   }
 }

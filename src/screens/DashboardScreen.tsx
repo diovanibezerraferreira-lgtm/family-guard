@@ -16,6 +16,7 @@ import {
   toggleAppBlock,
   addCustomAppRule,
   saveSafeZone,
+  seedDefaultAppsForChild,
   AppRule,
 } from '../services/familyService';
 import LiveMapCard from '../components/LiveMapCard';
@@ -186,7 +187,7 @@ export default function DashboardScreen() {
               </View>
             </View>
 
-            {/* Módulo B: Mapa Interativo e Cercas Virtuais */}
+            {/* Mapa Interativo e Cercas Virtuais */}
             <LiveMapCard
               childName={activeChild.name}
               location={activeChild.lastLocation}
@@ -195,7 +196,7 @@ export default function DashboardScreen() {
               onSaveZone={(zone) => saveSafeZone(activeChild.id, activeChild.safeZones || [], zone)}
             />
 
-            {/* Módulo A: Controlo Individual de Aplicativos */}
+            {/* Controlo Individual de Aplicativos */}
             <View style={styles.card}>
               <View style={styles.rowBetween}>
                 <View style={styles.cardHeader}>
@@ -207,6 +208,17 @@ export default function DashboardScreen() {
                   <Text style={styles.smallAddText}>App</Text>
                 </TouchableOpacity>
               </View>
+
+              {appsList.length === 0 && (
+                <TouchableOpacity
+                  style={[styles.lockBtn, { backgroundColor: '#101D38', marginTop: 8 }]}
+                  onPress={() => seedDefaultAppsForChild(activeChild.id)}
+                >
+                  <Text style={{ color: '#D6AD53', fontWeight: '700' }}>
+                    Carregar Aplicativos Padrão (YouTube, Roblox, TikTok...)
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               {appsList.map((app) => (
                 <View key={app.packageName} style={styles.appRow}>
@@ -252,122 +264,4 @@ export default function DashboardScreen() {
         </View>
       </Modal>
 
-      {/* Modal Adicionar App Personalizado */}
-      <Modal visible={appModalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.cardTitle}>Adicionar Regra de Aplicativo</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Nome do App (ex: Free Fire)"
-              value={customAppName}
-              onChangeText={setCustomAppName}
-            />
-            <TextInput
-              style={[styles.input, { marginTop: 0 }]}
-              placeholder="Pacote Android opcional (ex: com.dts.freefireth)"
-              autoCapitalize="none"
-              value={customAppPkg}
-              onChangeText={setCustomAppPkg}
-            />
-            <View style={styles.rowBetween}>
-              <TouchableOpacity onPress={() => setAppModalVisible(false)} style={styles.cancelBtn}>
-                <Text style={styles.cancelBtnText}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleAddCustomApp} style={styles.confirmBtn}>
-                <Text style={styles.confirmBtnText}>Adicionar e Bloquear</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F6FA' },
-  topBar: {
-    backgroundColor: '#101D38', paddingTop: 52, paddingBottom: 18, paddingHorizontal: 20,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-  },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  topTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '800', letterSpacing: 1 },
-  scrollContent: { padding: 16, paddingBottom: 40 },
-  childTabs: { flexDirection: 'row', marginBottom: 16 },
-  childPill: {
-    backgroundColor: '#FFFFFF', paddingVertical: 10, paddingHorizontal: 18,
-    borderRadius: 20, marginRight: 10, borderWidth: 1, borderColor: '#DCE2EE',
-  },
-  childPillActive: { backgroundColor: '#101D38', borderColor: '#101D38' },
-  childPillText: { color: '#101D38', fontWeight: '700' },
-  childPillTextActive: { color: '#D6AD53' },
-  addPill: {
-    backgroundColor: '#101D38', paddingVertical: 10, paddingHorizontal: 16,
-    borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 6,
-  },
-  addPillText: { color: '#FFFFFF', fontWeight: '600' },
-  emptyBox: {
-    backgroundColor: '#FFFFFF', borderRadius: 18, padding: 32, alignItems: 'center', marginTop: 20,
-  },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#101D38', marginTop: 12 },
-  emptySub: { fontSize: 13, color: '#64748B', textAlign: 'center', marginTop: 6 },
-  alertBanner: {
-    backgroundColor: '#FEF3C7', borderColor: '#D6AD53', borderWidth: 1.5,
-    borderRadius: 14, padding: 14, marginBottom: 14,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-  },
-  alertText: { color: '#101D38', fontWeight: '700', flex: 1, marginRight: 10 },
-  approveBtn: { backgroundColor: '#101D38', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10 },
-  approveBtnText: { color: '#D6AD53', fontWeight: '700', fontSize: 13 },
-  card: {
-    backgroundColor: '#FFFFFF', borderRadius: 18, padding: 18, marginBottom: 14,
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
-  },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  childName: { fontSize: 20, fontWeight: '800', color: '#101D38' },
-  statusSub: { fontSize: 13, color: '#64748B', marginTop: 2 },
-  batteryBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: '#F1F5F9', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 10,
-  },
-  batteryText: { color: '#101D38', fontWeight: '700', fontSize: 13 },
-  lockBtn: {
-    marginTop: 16, borderRadius: 12, padding: 14,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-  },
-  lockMode: { backgroundColor: '#DC2626' },
-  unlockMode: { backgroundColor: '#D6AD53' },
-  lockBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#101D38' },
-  timeValue: { fontSize: 15, color: '#334155', fontWeight: '600', marginBottom: 12 },
-  timeActions: { flexDirection: 'row', gap: 10 },
-  timeBtn: {
-    flex: 1, backgroundColor: '#101D38', padding: 12, borderRadius: 10, alignItems: 'center',
-  },
-  timeBtnText: { color: '#D6AD53', fontWeight: '700' },
-  smallAddBtn: {
-    backgroundColor: '#101D38', paddingVertical: 6, paddingHorizontal: 12,
-    borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 10,
-  },
-  smallAddText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
-  appRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9',
-  },
-  appName: { fontSize: 15, fontWeight: '700', color: '#101D38' },
-  appMeta: { fontSize: 12, color: '#64748B', marginTop: 2 },
-  modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(16, 29, 56, 0.7)', justifyContent: 'center', padding: 24,
-  },
-  modalCard: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 20 },
-  input: {
-    borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, padding: 12,
-    marginVertical: 12, fontSize: 15,
-  },
-  cancelBtn: { padding: 12 },
-  cancelBtnText: { color: '#64748B', fontWeight: '600' },
-  confirmBtn: { backgroundColor: '#101D38', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 10 },
-  confirmBtnText: { color: '#D6AD53', fontWeight: '700' },
-});
+      {/* Modal Adicionar App Personalizado

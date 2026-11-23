@@ -8,6 +8,7 @@ export interface AppRule {
   packageName: string;
   name: string;
   category: string;
+  url: string;
   isBlocked: boolean;
   usedMinutesToday: number;
 }
@@ -20,14 +21,23 @@ export interface SafeZone {
   radiusMeters: number;
 }
 
-const DEFAULT_APPS: Omit<AppRule, 'usedMinutesToday'>[] = [
-  { packageName: 'com.google.android.youtube', name: 'YouTube', category: 'Vídeo', isBlocked: false },
-  { packageName: 'com.roblox.client', name: 'Roblox', category: 'Jogos', isBlocked: false },
-  { packageName: 'com.zhiliaoapp.musically', name: 'TikTok', category: 'Social', isBlocked: true },
-  { packageName: 'com.whatsapp', name: 'WhatsApp', category: 'Comunicação', isBlocked: false },
-  { packageName: 'com.instagram.android', name: 'Instagram', category: 'Social', isBlocked: true },
-  { packageName: 'com.android.chrome', name: 'Navegador Chrome', category: 'Web', isBlocked: false },
+export const DEFAULT_APPS: Omit<AppRule, 'usedMinutesToday'>[] = [
+  { packageName: 'com.google.android.youtube', name: 'YouTube', category: 'Vídeo', url: 'https://m.youtube.com', isBlocked: false },
+  { packageName: 'com.roblox.client', name: 'Roblox', category: 'Jogos', url: 'https://www.roblox.com', isBlocked: false },
+  { packageName: 'com.zhiliaoapp.musically', name: 'TikTok', category: 'Social', url: 'https://www.tiktok.com', isBlocked: true },
+  { packageName: 'com.whatsapp', name: 'WhatsApp', category: 'Comunicação', url: 'https://web.whatsapp.com', isBlocked: false },
+  { packageName: 'com.instagram.android', name: 'Instagram', category: 'Social', url: 'https://www.instagram.com', isBlocked: true },
+  { packageName: 'com.android.chrome', name: 'Pesquisa Google', category: 'Web', url: 'https://www.google.com', isBlocked: false },
 ];
+
+export async function seedDefaultAppsForChild(childId: string) {
+  for (const app of DEFAULT_APPS) {
+    await setDoc(doc(db, 'children', childId, 'apps', app.packageName), {
+      ...app,
+      usedMinutesToday: 0,
+    }, { merge: true });
+  }
+}
 
 export async function createChildProfile(parentId: string, name: string, dailyLimitMinutes = 120) {
   const pairingCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -53,12 +63,7 @@ export async function createChildProfile(parentId: string, name: string, dailyLi
     createdAt: serverTimestamp(),
   });
 
-  for (const app of DEFAULT_APPS) {
-    await setDoc(doc(db, 'children', childRef.id, 'apps', app.packageName), {
-      ...app,
-      usedMinutesToday: 0,
-    });
-  }
+  await seedDefaultAppsForChild(childRef.id);
 
   return { childId: childRef.id, pairingCode };
 }
@@ -99,12 +104,17 @@ export async function toggleAppBlock(childId: string, packageName: string, isBlo
   await updateDoc(doc(db, 'children', childId, 'apps', packageName), { isBlocked });
 }
 
-export async function addCustomAppRule(childId: string, name: string, packageName: string) {
-  const cleanPkg = packageName.trim() || `custom.${name.toLowerCase().replace(/\s+/g, '')}`;
-  await setDoc(doc(db, 'children', childId, 'apps', cleanPkg), {
-    packageName: cleanPkg,
+export async function addCustomAppRule(childId: string, name: string, urlOrPkg: string) {
+  const cleanId = `custom.${name.toLowerCase().replace(/[^a-z0-9]/g, '')}_${Date.now()}`;
+  const formattedUrl = urlOrPkg.startsWith('http')
+    ? urlOrPkg.trim()
+    : `https://www.google.com/search?q=${encodeURIComponent(name.trim())}`;
+
+  await setDoc(doc(db, 'children', childId, 'apps', cleanId), {
+    packageName: cleanId,
     name: name.trim(),
     category: 'Personalizado',
+    url: formattedUrl,
     isBlocked: true,
     usedMinutesToday: 0,
   });
@@ -134,6 +144,7 @@ export async function updateChildTelemetry(
   childId: string,
   lat: number,
   lng: number,
+  accuracy: number,
   batteryLevel: number,
   safeZones: SafeZone[] = []
 ) {
@@ -149,7 +160,7 @@ export async function updateChildTelemetry(
   }
 
   await updateDoc(doc(db, 'children', childId), {
-    lastLocation: { lat, lng, updatedAt: Date.now() },
+    lastLocation: { lat, lng, accuracy: Math.round(accuracy), updatedAt: Date.now() },
     batteryLevel,
     geofenceAlert,
     lastSeen: serverTimestamp(),
