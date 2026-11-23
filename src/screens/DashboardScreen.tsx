@@ -264,4 +264,4 @@ export default function DashboardScreen() {
         </View>
       </Modal>
 
-      {/* Modal Adicionar App Personalizado
+      {/* Modal Adicionar App Personalizado */}
