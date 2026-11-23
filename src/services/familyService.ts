@@ -4,8 +4,6 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
-const db = getFirestore();
-
 export interface AppRule {
   packageName: string;
   name: string;
